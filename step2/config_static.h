@@ -8,7 +8,7 @@
 #include <string.h>
 #include <errno.h>
 #include <netinet/in.h>
-#include <err.h>
+#include <inttypes.h>
 
 #endif
 

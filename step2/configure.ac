@@ -11,10 +11,11 @@ AC_CONFIG_FILES([Makefile])
 AM_SILENT_RULES([yes])
 AM_CPPFLAGS="$AM_CPPFLAGS -I\${top_srcdir}/libev -I\${top_srcdir}/lcb-plugin"
 
+AC_SEARCH_LIBS(dlopen, dl)
 AC_CHECK_LIB([couchbase], [lcb_set_http_data_callback], [],
              [AC_MSG_ERROR(Failed to locate libcouchbase >= 2.0.0)])
 
-AC_CHECK_HEADERS_ONCE([unistd.h fcntl.h stdio.h stdlib.h string.h errno.h netinet/in.h err.h])
+AC_CHECK_HEADERS_ONCE([unistd.h fcntl.h stdio.h stdlib.h string.h errno.h netinet/in.h inttypes.h])
 
 AH_TOP([
 #ifndef CONFIG_H

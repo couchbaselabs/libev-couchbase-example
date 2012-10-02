@@ -1,26 +1,9 @@
 /* -*- Mode: C; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
-#include <unistd.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <netinet/in.h>
-#include "ringbuffer/ringbuffer.h"
-#include "config.h"
-#include "ev.h"
+
+#include "common.h"
+
 #define PORT_NO 4567
-#define BUFFER_SIZE 256
-
-struct client_s {
-    struct ev_io io;
-    ringbuffer_t buf;
-    int fd;
-    struct sockaddr_in addr;
-    socklen_t naddr;
-};
-
-#define fail(msg)   \
-    perror(msg);    \
-    abort();
+#define THE_KEY "example"
 
 static ssize_t
 io_recvv(lcb_socket_t sock, struct lcb_iovec_st iov[])
@@ -62,37 +45,45 @@ client_cb(struct ev_loop *loop, struct ev_io *watcher, int revents)
     struct client_s *client = (struct client_s *)watcher;
 
     if (EV_READ & revents) {
-        ringbuffer_ensure_capacity(&client->buf, BUFFER_SIZE);
-        ringbuffer_get_iov(&client->buf, RINGBUFFER_WRITE, iov);
+        ringbuffer_ensure_capacity(&client->in, BUFFER_SIZE);
+        ringbuffer_get_iov(&client->in, RINGBUFFER_WRITE, iov);
         nbytes = io_recvv(watcher->fd, iov);
         if (nbytes < 0) {
             fail("read error");
         } else if (nbytes == 0) {
             ev_io_stop(loop, watcher);
-            ringbuffer_destruct(&client->buf);
+            ringbuffer_destruct(&client->in);
             free(client);
             printf("Peer disconnected\n");
             return;
         } else {
-            ringbuffer_produced(&client->buf, nbytes);
+            char *val;
+            ringbuffer_produced(&client->in, nbytes);
             printf("Received %zu bytes\n", nbytes);
-            ev_io_stop(loop, watcher);
-            ev_io_set(watcher, watcher->fd, EV_WRITE);
-            ev_io_start(loop, watcher);
+            val = malloc(nbytes);
+            if (!val) {
+                fail("allocate buffer for value");
+            }
+            if (ringbuffer_read(&client->in, val, nbytes) != nbytes) {
+                free(val);
+                fail("read value into the buffer");
+            }
+            storage_put(client, THE_KEY, val, nbytes);
+            free(val);
         }
     } else if (EV_WRITE & revents) {
-        ringbuffer_get_iov(&client->buf, RINGBUFFER_READ, iov);
+        ringbuffer_get_iov(&client->out, RINGBUFFER_READ, iov);
         nbytes = io_sendv(watcher->fd, iov);
         if (nbytes < 0) {
             fail("write error");
         } else if (nbytes == 0) {
             ev_io_stop(loop, watcher);
-            ringbuffer_destruct(&client->buf);
+            ringbuffer_destruct(&client->out);
             free(client);
             printf("Peer disconnected\n");
             return;
         } else {
-            ringbuffer_consumed(&client->buf, nbytes);
+            ringbuffer_consumed(&client->out, nbytes);
             printf("Sent %zu bytes\n", nbytes);
             ev_io_stop(loop, watcher);
             ev_io_set(watcher, watcher->fd, EV_READ);
@@ -107,6 +98,7 @@ void
 accept_cb(struct ev_loop *loop, struct ev_io *watcher, int revents)
 {
     struct client_s *client;
+    struct server_s *server = (struct server_s *)watcher;
 
     if (EV_ERROR & revents) {
         fail("got invalid event");
@@ -115,12 +107,17 @@ accept_cb(struct ev_loop *loop, struct ev_io *watcher, int revents)
     if (!client) {
         fail("client watcher alloc");
     }
-    if (!ringbuffer_initialize(&client->buf, BUFFER_SIZE)) {
-        fail("client buffer alloc");
+    if (!ringbuffer_initialize(&client->in, BUFFER_SIZE)) {
+        fail("client input buffer alloc");
+    }
+    if (!ringbuffer_initialize(&client->out, BUFFER_SIZE)) {
+        fail("client output buffer alloc");
     }
     client->naddr = sizeof(client->addr);
     client->fd = accept(watcher->fd, (struct sockaddr *)&client->addr,
                         &client->naddr);
+    client->loop = loop;
+    client->handle = server->handle;
     if (client->fd < 0) {
         fail("accept error");
     }
@@ -137,7 +134,9 @@ main()
     struct ev_loop *loop = ev_default_loop(0);
     int sd;
     struct sockaddr_in addr;
-    struct ev_io server;
+    struct server_s server;
+
+    server.handle = storage_init(loop, "localhost:8091", "default", NULL);
 
     if ((sd = socket(PF_INET, SOCK_STREAM, 0)) < 0) {
         fail("socket error");
@@ -155,14 +154,14 @@ main()
         fail("listen error");
     }
 
-    ev_io_init(&server, accept_cb, sd, EV_READ);
-    ev_io_start(loop, &server);
+    ev_io_init(&server.io, accept_cb, sd, EV_READ);
+    ev_io_start(loop, &server.io);
 
     printf("Listen on %d\n", PORT_NO);
+
     while (1) {
         ev_loop(loop, 0);
     }
 
     return 0;
 }
-

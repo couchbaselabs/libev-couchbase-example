@@ -26,9 +26,7 @@
 #ifndef LCB_PLUGIN_LIBEV_IO_OPTS_H
 #define LCB_PLUGIN_LIBEV_IO_OPTS_H 1
 
-#include "config.h"
-#include <libcouchbase/couchbase.h>
-#include "ev.h"
+#include "common.h"
 
 #define INVALID_SOCKET -1
 
@@ -40,12 +38,14 @@ extern "C" {
      * Create an instance of an event handler that utilize libev for
      * event notification.
      *
-     * @param loop the event loop to hook use (please note that you shouldn't
-     *             reference the event loop from multiple threads)
-     * @return a pointer to a newly created and initialized event handler
+     * @param io a pointer to a newly created and initialized event handler
+     * @param cookie the event loop to hook use (please note that you shouldn't
+     *               reference the event loop from multiple threads)
+     *
+     * @return status of the operation
      */
     LIBCOUCHBASE_API
-    struct lcb_io_opt_st *lcb_create_libev_io_opts(struct ev_loop *loop);
+    lcb_error_t lcb_create_libev_io_opts(lcb_io_opt_t *io, struct ev_loop *loop);
 
 #ifdef __cplusplus
 }

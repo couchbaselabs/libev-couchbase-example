@@ -51,7 +51,7 @@ static lcb_ssize_t lcb_io_recvv(struct lcb_io_opt_st *iops,
     lcb_ssize_t ret;
 
     if (niov != 2) {
-        err(1, "lcb_io_recvv: invalid niov");
+        fail("lcb_io_recvv: invalid niov");
     }
     memset(&msg, 0, sizeof(msg));
     msg.msg_iov = vec;
@@ -92,7 +92,7 @@ static lcb_ssize_t lcb_io_sendv(struct lcb_io_opt_st *iops,
     lcb_ssize_t ret;
 
     if (niov != 2) {
-        err(1, "lcb_io_recvv: invalid niov");
+        fail("lcb_io_recvv: invalid niov");
     }
     memset(&msg, 0, sizeof(msg));
     msg.msg_iov = vec;
@@ -335,13 +335,14 @@ static void lcb_destroy_io_opts(struct lcb_io_opt_st *iops)
 }
 
 LIBCOUCHBASE_API
-struct lcb_io_opt_st *lcb_create_libev_io_opts(struct ev_loop *loop) {
+lcb_error_t lcb_create_libev_io_opts(lcb_io_opt_t *io, struct ev_loop *loop)
+{
     struct lcb_io_opt_st *ret = calloc(1, sizeof(*ret));
     struct libev_cookie *cookie = calloc(1, sizeof(*cookie));
     if (ret == NULL || cookie == NULL) {
         free(ret);
         free(cookie);
-        return NULL;
+        return LCB_CLIENT_ENOMEM;
     }
 
     /* setup io iops! */
@@ -372,7 +373,7 @@ struct lcb_io_opt_st *lcb_create_libev_io_opts(struct ev_loop *loop) {
         if ((cookie->loop = ev_loop_new(EVFLAG_AUTO | EVFLAG_NOENV)) == NULL) {
             free(ret);
             free(cookie);
-            return NULL;
+            return LCB_CLIENT_ENOMEM;
         }
         cookie->allocated = 1;
     } else {
@@ -381,5 +382,6 @@ struct lcb_io_opt_st *lcb_create_libev_io_opts(struct ev_loop *loop) {
     }
     ret->cookie = cookie;
 
-    return ret;
+    *io = ret;
+    return LCB_SUCCESS;
 }
