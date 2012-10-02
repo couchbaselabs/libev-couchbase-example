@@ -4,9 +4,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <netinet/in.h>
-#include <ev.h>
 #include "ringbuffer/ringbuffer.h"
-
+#include "config.h"
+#include "ev.h"
 #define PORT_NO 4567
 #define BUFFER_SIZE 256
 
