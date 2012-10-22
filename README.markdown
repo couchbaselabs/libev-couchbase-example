@@ -15,3 +15,6 @@ it is forwarding incoming message to couchbase server and reply its CAS
 value back to the client. The interesting thing here, that libcouchbase
 could be used without any event library dependency, because the host
 server application already has builtin event loop.
+
+For second example libcouchbase version 2.0.0beta2 needed. See
+http://www.couchbase.com/develop/c/next for installation details.

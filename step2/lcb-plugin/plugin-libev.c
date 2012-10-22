@@ -20,8 +20,8 @@
  *
  * @author Sergey Avseyev
  */
-
 #include "lcb-plugin/libev_io_opts.h"
+
 
 struct libev_cookie {
     struct ev_loop *loop;
@@ -36,7 +36,7 @@ static lcb_ssize_t lcb_io_recv(struct lcb_io_opt_st *iops,
 {
     lcb_ssize_t ret = recv(sock, buffer, len, flags);
     if (ret < 0) {
-        iops->error = errno;
+        iops->v.v0.error = errno;
     }
     return ret;
 }
@@ -51,7 +51,7 @@ static lcb_ssize_t lcb_io_recvv(struct lcb_io_opt_st *iops,
     lcb_ssize_t ret;
 
     if (niov != 2) {
-        fail("lcb_io_recvv: invalid niov");
+        return -1;
     }
     memset(&msg, 0, sizeof(msg));
     msg.msg_iov = vec;
@@ -63,7 +63,7 @@ static lcb_ssize_t lcb_io_recvv(struct lcb_io_opt_st *iops,
     ret = recvmsg(sock, &msg, 0);
 
     if (ret < 0) {
-        iops->error = errno;
+        iops->v.v0.error = errno;
     }
 
     return ret;
@@ -77,7 +77,7 @@ static lcb_ssize_t lcb_io_send(struct lcb_io_opt_st *iops,
 {
     lcb_ssize_t ret = send(sock, msg, len, flags);
     if (ret < 0) {
-        iops->error = errno;
+        iops->v.v0.error = errno;
     }
     return ret;
 }
@@ -92,7 +92,7 @@ static lcb_ssize_t lcb_io_sendv(struct lcb_io_opt_st *iops,
     lcb_ssize_t ret;
 
     if (niov != 2) {
-        fail("lcb_io_recvv: invalid niov");
+        return -1;
     }
     memset(&msg, 0, sizeof(msg));
     msg.msg_iov = vec;
@@ -104,7 +104,7 @@ static lcb_ssize_t lcb_io_sendv(struct lcb_io_opt_st *iops,
     ret = sendmsg(sock, &msg, 0);
 
     if (ret < 0) {
-        iops->error = errno;
+        iops->v.v0.error = errno;
     }
     return ret;
 }
@@ -145,12 +145,12 @@ static lcb_socket_t lcb_io_socket(struct lcb_io_opt_st *iops,
 {
     lcb_socket_t sock = socket(domain, type, protocol);
     if (sock == INVALID_SOCKET) {
-        iops->error = errno;
+        iops->v.v0.error = errno;
     } else {
         if (make_socket_nonblocking(sock) != 0) {
             int error = errno;
-            iops->close(iops, sock);
-            iops->error = error;
+            iops->v.v0.close(iops, sock);
+            iops->v.v0.error = error;
             sock = INVALID_SOCKET;
         }
     }
@@ -172,7 +172,7 @@ static int lcb_io_connect(struct lcb_io_opt_st *iops,
 {
     int ret = connect(sock, name, (socklen_t)namelen);
     if (ret < 0) {
-        iops->error = errno;
+        iops->v.v0.error = errno;
     }
     return ret;
 }
@@ -218,7 +218,7 @@ static int lcb_io_update_event(struct lcb_io_opt_st *iops,
                                                short which,
                                                void *cb_data))
 {
-    struct libev_cookie *io_cookie = iops->cookie;
+    struct libev_cookie *io_cookie = iops->v.v0.cookie;
     struct libev_event *evt = event;
     int events = EV_NONE;
 
@@ -248,7 +248,7 @@ static void lcb_io_delete_event(struct lcb_io_opt_st *iops,
                                 lcb_socket_t sock,
                                 void *event)
 {
-    struct libev_cookie *io_cookie = iops->cookie;
+    struct libev_cookie *io_cookie = iops->v.v0.cookie;
     struct libev_event *evt = event;
     ev_io_stop(io_cookie->loop, &evt->ev.io);
     (void)sock;
@@ -269,7 +269,7 @@ static int lcb_io_update_timer(struct lcb_io_opt_st *iops,
                                                short which,
                                                void *cb_data))
 {
-    struct libev_cookie *io_cookie = iops->cookie;
+    struct libev_cookie *io_cookie = iops->v.v0.cookie;
     struct libev_event *evt = timer;
 
 #ifdef HAVE_LIBEV4
@@ -292,7 +292,7 @@ static int lcb_io_update_timer(struct lcb_io_opt_st *iops,
 static void lcb_io_delete_timer(struct lcb_io_opt_st *iops,
                                 void *event)
 {
-    struct libev_cookie *io_cookie = iops->cookie;
+    struct libev_cookie *io_cookie = iops->v.v0.cookie;
     struct libev_event *evt = event;
     ev_timer_stop(io_cookie->loop, &evt->ev.timer);
 }
@@ -306,7 +306,7 @@ static void lcb_io_destroy_timer(struct lcb_io_opt_st *iops,
 
 static void lcb_io_stop_event_loop(struct lcb_io_opt_st *iops)
 {
-    struct libev_cookie *io_cookie = iops->cookie;
+    struct libev_cookie *io_cookie = iops->v.v0.cookie;
 #ifdef HAVE_LIBEV4
     ev_break(io_cookie->loop, EVBREAK_ONE);
 #else
@@ -316,7 +316,7 @@ static void lcb_io_stop_event_loop(struct lcb_io_opt_st *iops)
 
 static void lcb_io_run_event_loop(struct lcb_io_opt_st *iops)
 {
-    struct libev_cookie *io_cookie = iops->cookie;
+    struct libev_cookie *io_cookie = iops->v.v0.cookie;
 #ifdef HAVE_LIBEV4
     ev_run(io_cookie->loop, 0);
 #else
@@ -326,7 +326,7 @@ static void lcb_io_run_event_loop(struct lcb_io_opt_st *iops)
 
 static void lcb_destroy_io_opts(struct lcb_io_opt_st *iops)
 {
-    struct libev_cookie *io_cookie = iops->cookie;
+    struct libev_cookie *io_cookie = iops->v.v0.cookie;
     if (io_cookie->allocated) {
         ev_loop_destroy(io_cookie->loop);
     }
@@ -346,28 +346,31 @@ lcb_error_t lcb_create_libev_io_opts(lcb_io_opt_t *io, struct ev_loop *loop)
     }
 
     /* setup io iops! */
-    ret->version = 1;
-    ret->dlhandle = NULL;
-    ret->recv = lcb_io_recv;
-    ret->send = lcb_io_send;
-    ret->recvv = lcb_io_recvv;
-    ret->sendv = lcb_io_sendv;
-    ret->socket = lcb_io_socket;
-    ret->close = lcb_io_close;
-    ret->connect = lcb_io_connect;
-    ret->delete_event = lcb_io_delete_event;
-    ret->destroy_event = lcb_io_destroy_event;
-    ret->create_event = lcb_io_create_event;
-    ret->update_event = lcb_io_update_event;
+    ret->version = 0;
+    ret->v.v0.dlhandle = NULL;
+    /* consider that struct isn't allocated by the library,
+     * `need_cleanup' flag might be set in lcb_create() */
+    ret->v.v0.need_cleanup = 0;
+    ret->v.v0.recv = lcb_io_recv;
+    ret->v.v0.send = lcb_io_send;
+    ret->v.v0.recvv = lcb_io_recvv;
+    ret->v.v0.sendv = lcb_io_sendv;
+    ret->v.v0.socket = lcb_io_socket;
+    ret->v.v0.close = lcb_io_close;
+    ret->v.v0.connect = lcb_io_connect;
+    ret->v.v0.delete_event = lcb_io_delete_event;
+    ret->v.v0.destroy_event = lcb_io_destroy_event;
+    ret->v.v0.create_event = lcb_io_create_event;
+    ret->v.v0.update_event = lcb_io_update_event;
 
-    ret->delete_timer = lcb_io_delete_timer;
-    ret->destroy_timer = lcb_io_destroy_timer;
-    ret->create_timer = lcb_io_create_event;
-    ret->update_timer = lcb_io_update_timer;
+    ret->v.v0.delete_timer = lcb_io_delete_timer;
+    ret->v.v0.destroy_timer = lcb_io_destroy_timer;
+    ret->v.v0.create_timer = lcb_io_create_event;
+    ret->v.v0.update_timer = lcb_io_update_timer;
 
-    ret->run_event_loop = lcb_io_run_event_loop;
-    ret->stop_event_loop = lcb_io_stop_event_loop;
-    ret->destructor = lcb_destroy_io_opts;
+    ret->v.v0.run_event_loop = lcb_io_run_event_loop;
+    ret->v.v0.stop_event_loop = lcb_io_stop_event_loop;
+    ret->v.v0.destructor = lcb_destroy_io_opts;
 
     if (loop == NULL) {
         if ((cookie->loop = ev_loop_new(EVFLAG_AUTO | EVFLAG_NOENV)) == NULL) {
@@ -380,7 +383,7 @@ lcb_error_t lcb_create_libev_io_opts(lcb_io_opt_t *io, struct ev_loop *loop)
         cookie->loop = loop;
         cookie->allocated = 0;
     }
-    ret->cookie = cookie;
+    ret->v.v0.cookie = cookie;
 
     *io = ret;
     return LCB_SUCCESS;
