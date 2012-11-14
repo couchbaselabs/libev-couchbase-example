@@ -9,7 +9,6 @@ AC_PROG_LN_S
 AM_CONFIG_HEADER([config.h])
 AC_CONFIG_FILES([Makefile])
 AM_SILENT_RULES([yes])
-AM_CPPFLAGS="$AM_CPPFLAGS -I\${top_srcdir}/libev"
 
 m4_include([libev.m4])
 
