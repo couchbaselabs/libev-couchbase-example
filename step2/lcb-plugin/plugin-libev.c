@@ -22,10 +22,10 @@
  */
 #include "lcb-plugin/libev_io_opts.h"
 
-
 struct libev_cookie {
     struct ev_loop *loop;
     int allocated;
+    int suspended;
 };
 
 static lcb_ssize_t lcb_io_recv(struct lcb_io_opt_st *iops,
@@ -251,6 +251,7 @@ static void lcb_io_delete_event(struct lcb_io_opt_st *iops,
     struct libev_cookie *io_cookie = iops->v.v0.cookie;
     struct libev_event *evt = event;
     ev_io_stop(io_cookie->loop, &evt->ev.io);
+    ev_io_init(&evt->ev.io, NULL, 0, 0);
     (void)sock;
 }
 
@@ -271,6 +272,7 @@ static int lcb_io_update_timer(struct lcb_io_opt_st *iops,
 {
     struct libev_cookie *io_cookie = iops->v.v0.cookie;
     struct libev_event *evt = timer;
+    ev_tstamp start, repeat;
 
 #ifdef HAVE_LIBEV4
     if (evt->handler == handler && evt->ev.io.events == EV_TIMER) {
@@ -283,8 +285,12 @@ static int lcb_io_update_timer(struct lcb_io_opt_st *iops,
     evt->data = cb_data;
     evt->handler = handler;
     ev_init(&evt->ev.io, handler_thunk);
-    evt->ev.timer.repeat = usec;
-    ev_timer_again(io_cookie->loop, &evt->ev.timer);
+    start = repeat = usec / (ev_tstamp)1000000;
+    if (io_cookie->suspended) {
+        start += ev_time() - ev_now(io_cookie->loop);
+    }
+    ev_timer_set(&evt->ev.timer, start, repeat);
+    ev_timer_start(io_cookie->loop, &evt->ev.timer);
 
     return 0;
 }
@@ -317,11 +323,13 @@ static void lcb_io_stop_event_loop(struct lcb_io_opt_st *iops)
 static void lcb_io_run_event_loop(struct lcb_io_opt_st *iops)
 {
     struct libev_cookie *io_cookie = iops->v.v0.cookie;
+    io_cookie->suspended = 0;
 #ifdef HAVE_LIBEV4
     ev_run(io_cookie->loop, 0);
 #else
     ev_loop(io_cookie->loop, 0);
 #endif
+    io_cookie->suspended = 1;
 }
 
 static void lcb_destroy_io_opts(struct lcb_io_opt_st *iops)
@@ -335,10 +343,16 @@ static void lcb_destroy_io_opts(struct lcb_io_opt_st *iops)
 }
 
 LIBCOUCHBASE_API
-lcb_error_t lcb_create_libev_io_opts(lcb_io_opt_t *io, struct ev_loop *loop)
+lcb_error_t lcb_create_libev_io_opts(int version, lcb_io_opt_t *io, void *arg)
 {
-    struct lcb_io_opt_st *ret = calloc(1, sizeof(*ret));
-    struct libev_cookie *cookie = calloc(1, sizeof(*cookie));
+    struct ev_loop *loop = arg;
+    struct lcb_io_opt_st *ret;
+    struct libev_cookie *cookie;
+    if (version != 0) {
+        return LCB_PLUGIN_VERSION_MISMATCH;
+    }
+    ret = calloc(1, sizeof(*ret));
+    cookie = calloc(1, sizeof(*cookie));
     if (ret == NULL || cookie == NULL) {
         free(ret);
         free(cookie);
@@ -347,7 +361,8 @@ lcb_error_t lcb_create_libev_io_opts(lcb_io_opt_t *io, struct ev_loop *loop)
 
     /* setup io iops! */
     ret->version = 0;
-    ret->v.v0.dlhandle = NULL;
+    ret->dlhandle = NULL;
+    ret->destructor = lcb_destroy_io_opts;
     /* consider that struct isn't allocated by the library,
      * `need_cleanup' flag might be set in lcb_create() */
     ret->v.v0.need_cleanup = 0;
@@ -370,7 +385,6 @@ lcb_error_t lcb_create_libev_io_opts(lcb_io_opt_t *io, struct ev_loop *loop)
 
     ret->v.v0.run_event_loop = lcb_io_run_event_loop;
     ret->v.v0.stop_event_loop = lcb_io_stop_event_loop;
-    ret->v.v0.destructor = lcb_destroy_io_opts;
 
     if (loop == NULL) {
         if ((cookie->loop = ev_loop_new(EVFLAG_AUTO | EVFLAG_NOENV)) == NULL) {
@@ -383,6 +397,7 @@ lcb_error_t lcb_create_libev_io_opts(lcb_io_opt_t *io, struct ev_loop *loop)
         cookie->loop = loop;
         cookie->allocated = 0;
     }
+    cookie->suspended = 1;
     ret->v.v0.cookie = cookie;
 
     *io = ret;
