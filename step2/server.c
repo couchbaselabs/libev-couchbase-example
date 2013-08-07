@@ -158,10 +158,7 @@ main()
     ev_io_start(loop, &server.io);
 
     printf("Listen on %d\n", PORT_NO);
-
-    while (1) {
-        ev_loop(loop, 0);
-    }
+    ev_run(loop, 0);
 
     return 0;
 }
