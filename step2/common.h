@@ -4,6 +4,7 @@
 #include "config.h"
 #include <libcouchbase/couchbase.h>
 #include "ev.h"
+#include <fcntl.h>
 #include "ringbuffer/ringbuffer.h"
 
 struct client_s {

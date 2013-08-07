@@ -99,6 +99,7 @@ accept_cb(struct ev_loop *loop, struct ev_io *watcher, int revents)
 {
     struct client_s *client;
     struct server_s *server = (struct server_s *)watcher;
+    int flags;
 
     if (EV_ERROR & revents) {
         fail("got invalid event");
@@ -113,13 +114,19 @@ accept_cb(struct ev_loop *loop, struct ev_io *watcher, int revents)
     if (!ringbuffer_initialize(&client->out, BUFFER_SIZE)) {
         fail("client output buffer alloc");
     }
+    client->loop = loop;
+    client->handle = server->handle;
     client->naddr = sizeof(client->addr);
     client->fd = accept(watcher->fd, (struct sockaddr *)&client->addr,
                         &client->naddr);
-    client->loop = loop;
-    client->handle = server->handle;
     if (client->fd < 0) {
         fail("accept error");
+    }
+    if ((flags = fcntl(client->fd, F_GETFL, NULL)) == -1) {
+        fail("fcntl(F_GETFL)");
+    }
+    if (fcntl(client->fd, F_SETFL, flags | O_NONBLOCK) == -1) {
+        fail("fcntl(F_SETFL, O_NONBLOCK)");
     }
 
     printf("Successfully connected with client\n");

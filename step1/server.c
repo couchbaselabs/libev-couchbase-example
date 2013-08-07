@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <netinet/in.h>
+#include <fcntl.h>
 #include "ringbuffer/ringbuffer.h"
 #include "config.h"
 #include "ev.h"
@@ -107,6 +108,7 @@ void
 accept_cb(struct ev_loop *loop, struct ev_io *watcher, int revents)
 {
     struct client_s *client;
+    int flags;
 
     if (EV_ERROR & revents) {
         fail("got invalid event");
@@ -123,6 +125,12 @@ accept_cb(struct ev_loop *loop, struct ev_io *watcher, int revents)
                         &client->naddr);
     if (client->fd < 0) {
         fail("accept error");
+    }
+    if ((flags = fcntl(client->fd, F_GETFL, NULL)) == -1) {
+        fail("fcntl(F_GETFL)");
+    }
+    if (fcntl(client->fd, F_SETFL, flags | O_NONBLOCK) == -1) {
+        fail("fcntl(F_SETFL, O_NONBLOCK)");
     }
 
     printf("Successfully connected with client\n");
