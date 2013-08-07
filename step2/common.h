@@ -23,6 +23,9 @@ struct server_s {
     lcb_t handle;
 };
 
+lcb_t storage_init(struct ev_loop *loop, const char *host, const char *bucket, const char *password);
+void storage_put(struct client_s *client, const char *key, const void *val, size_t nval);
+
 #define fail(msg)   \
     perror(msg);    \
     abort();
